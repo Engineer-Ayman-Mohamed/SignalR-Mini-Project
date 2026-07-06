@@ -1,0 +1,99 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SignalR Mini</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js">
+    </script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: system-ui, sans-serif; padding: 2rem; max-width: 600px; margin: 0 auto; background: #f5f5f5; }
+        h1 { font-size: 1.5rem; margin-bottom: 1rem; color: #333; }
+        .status { font-size: 0.85rem; margin-bottom: 1rem; padding: 0.4rem 0.8rem; border-radius: 6px; display: inline-block; }
+        .status.connected { background: #d4edda; color: #155724; }
+        .status.disconnected { background: #f8d7da; color: #721c24; }
+        .row { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; }
+        .row input { flex: 1; padding: 0.6rem; border: 1px solid #ccc; border-radius: 6px; font-size: 1rem; }
+        .row button { padding: 0.6rem 1.2rem; background: #0d6efd; color: #fff; border: none; border-radius: 6px; font-size: 1rem; cursor: pointer; }
+        .row button:hover { background: #0b5ed7; }
+        .messages { background: #fff; border-radius: 8px; padding: 1rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .messages h2 { font-size: 1rem; margin-bottom: 0.5rem; color: #555; }
+        .messages ul { list-style: none; }
+        .messages li { padding: 0.4rem 0; border-bottom: 1px solid #eee; font-size: 0.95rem; }
+        .messages li:last-child { border-bottom: none; }
+        .empty { color: #999; font-style: italic; }
+    </style>
+</head>
+<body>
+<h1>SignalR — Real-Time Messages</h1>
+<div id="status" class="status disconnected">Disconnected</div>
+
+<div class="row">
+    <input id="msgInput" type="text" placeholder="Type a message..." autofocus>
+    <button id="pushBtn">Push</button>
+</div>
+
+<div class="messages">
+    <h2>Messages from all sessions</h2>
+    <ul id="msgList">
+        <li class="empty">No messages yet. Open this page in another tab and push a message.</li>
+    </ul>
+</div>
+
+<script>
+    const connection = new signalR.HubConnectionBuilder()
+        .withUrl("/messages")
+        .withAutomaticReconnect([0, 2000, 5000, 10000])
+        .build();
+
+    const statusEl = document.getElementById("status");
+    const msgInput = document.getElementById("msgInput");
+    const pushBtn = document.getElementById("pushBtn");
+    const msgList = document.getElementById("msgList");
+
+    function setStatus(text, connected) {
+        statusEl.textContent = text;
+        statusEl.className = "status " + (connected ? "connected" : "disconnected");
+        pushBtn.disabled = !connected;
+        msgInput.disabled = !connected;
+    }
+
+    function addMessage(text) {
+        const empty = msgList.querySelector(".empty");
+        if (empty) empty.remove();
+        const li = document.createElement("li");
+        li.textContent = text;
+        msgList.appendChild(li);
+    }
+
+    connection.on("ReceiveMessage", (message) => {
+        addMessage(message);
+    });
+
+    connection.onreconnecting(() => setStatus("Reconnecting...", false));
+    connection.onreconnected(() => setStatus("Connected", true));
+    connection.onclose(() => setStatus("Disconnected", false));
+
+    connection.start()
+        .then(() => setStatus("Connected", true))
+        .catch(err => setStatus("Connection failed: " + err.message, false));
+
+    pushBtn.addEventListener("click", async () => {
+        const text = msgInput.value.trim();
+        if (!text) return;
+        try {
+            await connection.invoke("SendMessage", text); //? calling the SendMessage Method inside the Hub
+            msgInput.value = "";
+            msgInput.focus();
+        } catch (err) {
+            console.error("Push failed:", err);
+        }
+    });
+
+    msgInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") pushBtn.click();
+    });
+</script>
+</body>
+</html>
